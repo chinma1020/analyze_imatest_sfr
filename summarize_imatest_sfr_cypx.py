@@ -5,7 +5,7 @@ import seaborn as sns
 import re
 
 # **✅ ファイルのパス（変更しない）**
-base_path = "C:\Users\chinm\Videos\PremierePro\20250925_sigma20-200\解像度\画像切り出し\imatest_input\Results"
+base_path = "C:/Users/chinm/Videos/PremierePro/20250925_sigma20-200/解像度/画像切り出し/imatest_input/Results"
 file_path = f"{base_path}/SFR_cypx.csv"
 debug1 = f"{base_path}/check_filtered.xlsx"
 
@@ -14,7 +14,7 @@ df = pd.read_csv(file_path, header=0, keep_default_na=False)
 
 # **✅ カラム名のクリーンアップ**
 df.columns = df.columns.str.strip()
-df.columns = df.columns.str.replace("\n", "", regex=True)
+df.columns = df.columns.str.replace("/n", "", regex=True)
 df.columns = df.columns.str.replace(" ", "_", regex=True)
 
 # **✅ "File" カラムの特定**
@@ -23,7 +23,7 @@ if file_column is None:
     raise ValueError("⚠️ 'File' column not found. Please check the CSV header.")
 
 # **✅ 必要なカラムを選択**
-columns_to_keep = ["H/V", "MTF50_C/P", "Chr_Aber_area_pxls", "Edge_Angle", "Location", "MTF30"]
+columns_to_keep = ["H/V", "MTF50_C/P", "Chr_Aber_area_pxls", "Edge_Angle", "Location"]
 existing_columns = [col for col in columns_to_keep if col in df.columns]
 
 # **✅ データフレームを更新**
@@ -33,34 +33,37 @@ df = df[[file_column] + existing_columns]
 df.rename(columns={"MTF50_C/P": "MTF50", "MTF30": "MTF30"}, inplace=True)
 
 # **✅ "File" カラムを分割**
-df[["camera", "MedTeleMode", "UlanziLens", "DigitalZoom"]] = df[file_column].str.replace(".tif", "", regex=False).str.split("_", expand=True)
+df[["lens", "focal_length", "fstop"]] = df[file_column].str.replace(".tif", "", regex=False).str.split("_", expand=True)
+# **✅ fstopから'.MOV'以降を分離し、数値部分と動画情報に分割**
+fstop_split = df["fstop"].str.split(".MOV", n=1, expand=True)
+df["fstop"] = fstop_split[0]
+df["mov_info"] = fstop_split[1] if fstop_split.shape[1] > 1 else None
+
+    # **✅ focal_length を数値化（例: '020'→20, '200'→200）**
+df["focal_length_num"] = df["focal_length"].astype(int)
+
+# **✅ F-stop を小数点第一位の値に変換（例: '40'→4.0, '120'→12.0）**
+df["fstop_num"] = pd.to_numeric(df["fstop"], errors="coerce") / 10
+
 
 # **✅ 元の "File" カラムは削除**
-df.drop(columns=[file_column], inplace=True)
+# df.drop(columns=[file_column], inplace=True)
 
 # %%
 
 # **✅ "MedTeleMode" カラムの値を分かりやすくする**
-df["MedTeleMode"] = df["MedTeleMode"].map({
-    "tele0": "Med-Tele Mode OFF",
-    "tele1": "Med-Tele Mode 2x"
-}).fillna("Unknown")
+df["lens"] = df["lens"].map({
+    "l1": "Sigma20-200mm",
+    "l2": "Lumix S24-105mm",
+    "l3": "Lumix S70-300mm",
+    "l4": "Sigma150-600mm"
+}).fillna(df["lens"])
 
-# **✅ "UlanziLens" カラムの値を分かりやすくする**
-df["UlanziLens"] = df["UlanziLens"].map({
-    "uz0": "Ulanzi Lens OFF",
-    "uz1": "Ulanzi Lens ON"
-}).fillna("Unknown")
 
-# **✅ "DigitalZoom" カラムの値を分かりやすくする**
-df["DigitalZoom"] = df["DigitalZoom"].map({
-    "zoom0": "Digital Zoom OFF",
-    "zoom1": "Digital Zoom ON"
-}).fillna("Unknown")
 
 # **✅ Location の値から距離情報を抽出**
 def extract_percentage(location_str):
-    match = re.search(r"(\d+)%", str(location_str))
+    match = re.search(r"(/d+)%", str(location_str))
     return int(match.group(1)) if match else 100  # Default 100% (treated as Edge)
 
 df["Distance_from_Center"] = df["Location"].apply(extract_percentage)
@@ -71,9 +74,10 @@ df["Region"] = df["Distance_from_Center"].apply(lambda x: "Center" if x <= 30 el
 # **✅ Save DataFrame to Excel**
 df.to_excel(debug1, index=False)
 
+# %%
 # **✅ Display DataFrame**
-print(df.head())
-
+print(df)
+# %%
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
